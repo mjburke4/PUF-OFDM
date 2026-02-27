@@ -1,23 +1,18 @@
 function T = metric_im_energysep_pilots(Z, pilot_idx, Atilde)
-% Energy separation only within pilot bins (pilot-domain IM)
-% pilot_idx: vector of pilot bin indices
-% Atilde: vector of predicted active pilot bin indices (subset of pilot_idx)
+% Pilot-domain IM energy separation metric with robust normalization.
+% Z: N x 1 equalized (or raw FFT) bins
+% pilot_idx: pilot bin indices (vector)
+% Atilde: predicted active pilot indices (subset of pilot_idx)
 
-% ---- Defensive checks (catch drift / bugs early)
 pilot_idx = pilot_idx(:);
-Atilde    = Atilde(:);
+Atilde = Atilde(:);
 
-assert(~isempty(pilot_idx), 'pilot_idx is empty.');
-assert(~isempty(Atilde),    'Atilde is empty.');
-assert(all(ismember(Atilde, pilot_idx)), ...
-    'Atilde contains indices outside pilot_idx. Pilot-domain IM violated.');
-
-assert(numel(pilot_idx) > numel(Atilde), ...
-    'No inactive pilots remain: numel(pilot_idx) must be > numel(Atilde).');
+assert(all(ismember(Atilde, pilot_idx)), 'Atilde must be subset of pilot_idx.');
+assert(numel(pilot_idx) > numel(Atilde), 'Need at least one inactive pilot.');
 
 e = abs(Z).^2;
 
-pilot_mask  = false(size(Z));
+pilot_mask = false(size(Z));
 pilot_mask(pilot_idx) = true;
 
 active_mask = false(size(Z));
@@ -28,12 +23,6 @@ inactive_mask = pilot_mask & ~active_mask;
 Ea = mean(e(active_mask));
 Ei = mean(e(inactive_mask));
 
-% ---- Raw statistic (your original)
-T_raw = Ea - Ei;
-
-% ---- Normalized statistic (recommended)
 eps0 = 1e-12;
-%T = (Ea - Ei) / (Ei + eps0);   % dimensionless, more SNR-robust
-T = struct('raw', T_raw, 'norm', (Ea - Ei)/(Ei + eps0));
-
+T = (Ea - Ei) / (Ea + Ei + eps0);   % in roughly [-1,1]
 end

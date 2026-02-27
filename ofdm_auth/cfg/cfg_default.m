@@ -38,6 +38,11 @@ cfg.MC_trials = 200;      % per SNR point
 cfg.SNRdB_vec = -10:2:20;
 
 % Thresholds (we’ll sweep in figure scripts)
-cfg.tauP  = 0.6;
-cfg.tauIM = 0.2;
+%Single calibration at SNR=15 dB, L=8 (need 6/8), Vmax=3:
+  %tauP=0.1800 (FAR~0.004, mean H0 votes=2.12)
+  %tauIM=0.0450 (FAR~0.008, mean H0 votes=2.21)
+cfg.tauP  = 0.1800;
+cfg.tauIM = 0.0450;
+%cfg.tauP  = 0.6;
+%cfg.tauIM = 0.2;
 end

@@ -24,6 +24,11 @@ for u = 1:U
     % A is challenge_len x puf_bits
     nodes(u).A = randn(m, puf_bits);
 
+    % In init_node_population.m, inside the for u=1:U loop, add:
+    nodes(u).distance_m = 5 + (200-5)*rand();   % random distance in [5,200] meters
+    nodes(u).pl_d0_m = 1;                       % reference distance
+    nodes(u).pl_gamma = 2.7;                    % pathloss exponent (tune)
+
     % Keep for reference (optional)
     nodes(u).m = m;
     nodes(u).puf_bits = puf_bits;
