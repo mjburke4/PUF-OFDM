@@ -15,8 +15,13 @@ cfg.Npilots = 8;
 cfg.mod = 'QPSK';
 
 % Frame/voting
-cfg.Lsym = 32;        % OFDM symbols per frame
+cfg.Lsym = 8; %32;        % OFDM symbols per frame
 cfg.alpha = 0.75;     % vote fraction threshold
+
+cfg.adv_mode = 'impostor_random';   % options:
+% 'impostor_random'   -> random seed / random structure
+% 'impostor_othernode'-> different enrolled node
+% 'replay_stale_nonce'-> same node, stale nonce
 
 % IM parameters (pilot-domain IM)
 cfg.K_active_pilots = 4;  % sparsity knob: number of active pilot tones

@@ -1,19 +1,50 @@
 function out = run_one_trial_auth(cfg, nodes, u0, SNRref_dB, is_legit, p_flip)
 if nargin < 6, p_flip = 0; end
+% function out = run_one_trial_auth(cfg, nodes, u0, SNRref_dB, is_legit, p_flip)
+% if nargin < 6, p_flip = 0; end
 %function out = run_one_trial_auth(cfg, nodes, u0, SNRref_dB, is_legit)
 % Returns accept decisions for both metrics for one frame
-
-U = numel(nodes);
 L = cfg.Lsym;
 m = nodes(u0).m;
-B = 64;   % your default
+B = 64;
 d0 = 10; gamma = 2.7;
 
-% Nonce/challenge per frame
 C_seed = randi([0 1], 1, m);
 nonce_frame = randi([0 1], 1, 32);
 
-u_tx = u0;  % TX identity (used only for pathloss distance)
+u_tx = u0;   % default legitimate TX identity % TX identity (used only for pathloss distance)
+
+u_tx = u0;   % default legitimate transmitter
+
+if ~is_legit
+    switch cfg.adv_mode
+        case 'impostor_othernode'
+            cand = setdiff(1:numel(nodes), u0);
+            assert(~isempty(cand), 'Need at least 2 nodes for impostor_othernode.');
+            u_tx = cand(randi(numel(cand)));
+
+        case 'impostor_random'
+            u_tx = u0;   % claimed identity is still u0, but structure will be random
+
+        case 'replay_stale_nonce'
+            u_tx = u0;   % same node, stale nonce mismatch
+
+        otherwise
+            error('Unknown cfg.adv_mode: %s', cfg.adv_mode);
+    end
+end
+
+% U = numel(nodes);
+% L = cfg.Lsym;
+% m = nodes(u0).m;
+% B = 64;   % your default
+% d0 = 10; gamma = 2.7;
+
+% Nonce/challenge per frame
+% C_seed = randi([0 1], 1, m);
+% nonce_frame = randi([0 1], 1, 32);
+
+%u_tx = u0;  % TX identity (used only for pathloss distance)
 
 % Noise floor calibrated at d0 using actual signal power each symbol
 Vperm = 0;
@@ -22,34 +53,62 @@ Vim = 0;
 Tp = zeros(1,L);
 Tim = zeros(1,L);
 
+% fprintf('DEBUG: is_legit=%d, adv_mode=%s, u0=%d, u_tx=%d\n', ...
+%     is_legit, cfg.adv_mode, u0, u_tx);
+
 for ell = 1:L
     [X, Xp, meta] = gen_ofdm_symbol(cfg);
-        % --- TX mapping
+
+    % --- TX-side effective challenge / nonce ---
+    nonce_bits_tx = nonce_with_symbol(nonce_frame, ell, 16);
+    C_eff_tx      = mix_challenge_nonce(C_seed, nonce_bits_tx, nodes(u0).m);
+
     if is_legit
-        % Legit TX uses the enrolled mapping for u0 (must match verifier hypothesis)
-        %map_tx = verifier_mapping_apuf_sym(nodes(u0), C_seed, nonce_frame, ell, B, cfg.Npilots, cfg.K_active_pilots);
-        %[Xtilde, ~, ~] = apply_structure_operator_pilots(X, Xp, meta, map_tx.pilot_perm_local, map_tx.pilot_mask_local);
-        % --- TX computes effective challenge
-        C_eff = mix_challenge_nonce(C_seed, nonce_with_symbol(nonce_frame, ell, 16), nodes(u0).m);
-        
-        % --- TX reads PUF bits, then suffers flips
-        R = get_puf_bits(nodes(u0), C_eff, B);
-        R_noisy = flip_bits(R, p_flip);
-        
-        % --- TX derives seed and mapping from noisy bits
-        seed_u32 = hash_bits_u32(R_noisy);
-        pilot_perm_local = perm_from_seed(seed_u32, cfg.Npilots);
-        pilot_mask_local = mask_from_seed(seed_u32, cfg.Npilots, cfg.K_active_pilots);
-        
-        [Xtilde, ~, ~] = apply_structure_operator_pilots(X, Xp, meta, pilot_perm_local, pilot_mask_local);
+        % Legitimate transmitter uses enrolled node u0
+        R_tx = get_puf_bits(nodes(u0), C_eff_tx, B);
+        R_tx = flip_bits(R_tx, p_flip);
+
+        seed_tx = hash_bits_u32(R_tx);
+        pilot_perm_local = perm_from_seed(seed_tx, cfg.Npilots);
+        pilot_mask_local = mask_from_seed(seed_tx, cfg.Npilots, cfg.K_active_pilots);
+
     else
-        % Impostor TX uses random mapping per symbol (no access to PUF mapping)
-        seed_u32 = uint32(randi([0, 2^32-1]));
-        pilot_perm_local = perm_from_seed(seed_u32, cfg.Npilots);
-        pilot_mask_local = mask_from_seed(seed_u32, cfg.Npilots, cfg.K_active_pilots);
-        [Xtilde, ~, ~] = apply_structure_operator_pilots(X, Xp, meta, pilot_perm_local, pilot_mask_local);
+        switch cfg.adv_mode
+            case 'impostor_random'
+                % Random structure impostor
+                seed_tx = uint32(randi([0, 2^32-1]));
+                pilot_perm_local = perm_from_seed(seed_tx, cfg.Npilots);
+                pilot_mask_local = mask_from_seed(seed_tx, cfg.Npilots, cfg.K_active_pilots);
+
+            case 'impostor_othernode'
+                % Different enrolled node pretending to be u0
+                R_tx = get_puf_bits(nodes(u_tx), C_eff_tx, B);
+                R_tx = flip_bits(R_tx, p_flip);
+
+                seed_tx = hash_bits_u32(R_tx);
+                pilot_perm_local = perm_from_seed(seed_tx, cfg.Npilots);
+                pilot_mask_local = mask_from_seed(seed_tx, cfg.Npilots, cfg.K_active_pilots);
+
+            case 'replay_stale_nonce'
+                % Same node, but stale/wrong nonce at TX
+                nonce_frame_tx = [1 - nonce_frame(1), nonce_frame(2:end)];
+                nonce_bits_tx  = nonce_with_symbol(nonce_frame_tx, ell, 16);
+                C_eff_tx       = mix_challenge_nonce(C_seed, nonce_bits_tx, nodes(u0).m);
+
+                R_tx = get_puf_bits(nodes(u0), C_eff_tx, B);
+                R_tx = flip_bits(R_tx, p_flip);
+
+                seed_tx = hash_bits_u32(R_tx);
+                pilot_perm_local = perm_from_seed(seed_tx, cfg.Npilots);
+                pilot_mask_local = mask_from_seed(seed_tx, cfg.Npilots, cfg.K_active_pilots);
+
+            otherwise
+                error('Unknown cfg.adv_mode: %s', cfg.adv_mode);
+        end
     end
 
+    [Xtilde, ~, ~] = apply_structure_operator_pilots( ...
+        X, Xp, meta, pilot_perm_local, pilot_mask_local);
     
     x = ifft(Xtilde, cfg.Nfft);
     x_cp = [x(end-cfg.Ncp+1:end); x];
@@ -105,14 +164,31 @@ out.Vim = Vim;
 % if ~is_legit
 %     fprintf('Impostor votes this frame: %d\n', Vperm);
 % end
+if isempty(cfg.tauP)
+    error('cfg.tauP is empty — must be set before running trial');
+end
+
+if isempty(cfg.tauIM)
+    error('cfg.tauIM is empty — must be set before running trial');
+end
 
 out.accept_perm = frame_decision_votes(Vperm, L, cfg.alpha);
 out.accept_im   = frame_decision_votes(Vim,   L, cfg.alpha);
 out.accept_hybrid = out.accept_perm && out.accept_im;
+% out.accept_perm = logical(frame_decision_votes(Vperm, L, cfg.alpha));
+% out.accept_im   = logical(frame_decision_votes(Vim,   L, cfg.alpha));
+% out.accept_hybrid = out.accept_perm && out.accept_im;
 out.u_tx = u_tx;
 
 out.Tp = Tp;
 out.Tim = Tim;
+% 
+% tx_active = find(pilot_mask_local(:) > 0);                  % TX active positions
+% rx_active = find(map_rx.pilot_mask_local(:) > 0);           % verifier predicted active positions
+% 
+% overlap = numel(intersect(tx_active, rx_active));
+% fprintf('ell=%d  TX active=%s  RX active=%s  overlap=%d\n', ...
+%     ell, mat2str(tx_active.'), mat2str(rx_active.'), overlap);
 
 %fprintf('permutation mean: %d std: 5d\n', mean(out.Tp), std(out.Tp));
 %fprintf('IM mean: %d std: 5d\n', mean(out.Tim), std(out.Tim));
