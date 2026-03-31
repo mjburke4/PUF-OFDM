@@ -8,7 +8,7 @@ tau_d     = 0.92;
 alpha     = 0.75;
 
 % Keep your current good operating point
-phi_choices_deg = [-12, +12];
+phi_choices_deg = [-20, +20];
 
 results = repmat(struct( ...
     'trial', [], ...
