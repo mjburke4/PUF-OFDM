@@ -1,6 +1,5 @@
 function fig_far_frr_vs_tau_dppa()
-addpath 'C:\Users\michael.j.burke10\OneDrive - US Army\Desktop\Grad school stuff\PUF based dynamic spreading code generation\simulations\PUF_Modulation_ofdm_Sim\PUF-OFDM\ofdm_auth\lib'
-addpath 'C:\Users\michael.j.burke10\OneDrive - US Army\Desktop\Grad school stuff\PUF based dynamic spreading code generation\simulations\PUF_Modulation_ofdm_Sim\PUF-OFDM\ofdm_auth\cfg'
+
 cfg = cfg_default_dppa();
 cfg.Lsym = 8;
 cfg.alpha = 0.75;
@@ -12,7 +11,7 @@ u0 = 3;
 SNR_list = [-5 5 15];
 MC = 6000;
 
-tauD_grid = linspace(0.6, 1, 100);
+tauD_grid = linspace(0.6, 0.999, 100);
 
 figure; hold on; grid on;
 

@@ -9,22 +9,22 @@ cfg.Ncp  = 16;
 cfg.use_fftshift = true;
 
 % Pilot tones (example: 8 pilots)
-cfg.Npilots = 8;
+cfg.Npilots = 4;
 
 % Modulation
-cfg.mod = 'QPSK';
+cfg.mod = 'BPSK'; %'QPSK';
 
 % Frame/voting
 cfg.Lsym = 8; %32;        % OFDM symbols per frame
 cfg.alpha = 0.75;     % vote fraction threshold
 
-cfg.adv_mode = 'impostor_random';   % options:
+cfg.adv_mode = 'impostor_othernode'; %'impostor_random';   % options:
 % 'impostor_random'   -> random seed / random structure
 % 'impostor_othernode'-> different enrolled node
 % 'replay_stale_nonce'-> same node, stale nonce
 
 % IM parameters (pilot-domain IM)
-cfg.K_active_pilots = 4;  % sparsity knob: number of active pilot tones
+cfg.K_active_pilots = 2;  % sparsity knob: number of active pilot tones
 
 % Permutation parameters (pilot permutation depth)
 cfg.permute_pilots_only = true;

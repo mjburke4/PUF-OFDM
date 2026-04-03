@@ -1,8 +1,8 @@
 function fig_far_frr_vs_tau()
-
+addpath 'C:\Users\michael.j.burke10\OneDrive - US Army\Desktop\Grad school stuff\PUF based dynamic spreading code generation\simulations\PUF_Modulation_ofdm_Sim\PUF-OFDM\ofdm_auth\lib'
 cfg = cfg_default();
 cfg.chan.type = 'awgn';
-
+tic
 % Make curves visible
 cfg.Lsym  = 8;
 cfg.alpha = 0.75;
@@ -19,11 +19,11 @@ end
 u0 = 3;
 
 SNR_list = [-5 5 15];     % SNRs to compare
-MC = 5000;
+MC = 6000;
 
 %% ================= Permutation Plot =====================
 
-% tauP_grid = linspace(0, 1, 200);
+% tauP_grid = linspace(0, 1, 100);
 % 
 % figure; hold on; grid on;
 % 
@@ -77,7 +77,7 @@ MC = 5000;
 %% ================= IM Plot =====================
 
 %tauIM_grid = linspace(0, 0.4, 20);
-tauIM_grid = linspace(0, 1, 200);
+tauIM_grid = linspace(0, 1, 100);
 
 figure; hold on; grid on;
 
@@ -126,5 +126,5 @@ for s = 1:length(SNR_list)
     legendStrings{end+1} = sprintf('FRR (SNR= %d dB)', SNR_list(s));
 end
 legend(legendStrings, 'Location','best');
-
+toc
 end

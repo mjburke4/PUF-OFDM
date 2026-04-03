@@ -27,19 +27,6 @@ nonce_frame = randi([0 1], 1, 32);
 % Base pilot vector (simple pilot-domain abstraction)
 p_base = ones(Npilots,1);
 
-% Choose TX identity
-% if is_legit
-%     node_tx = nodes(u0);
-% else
-%     % Impostor: choose a different node if available, else random phase behavior
-%     if numel(nodes) >= 2
-%         imp_choices = setdiff(1:numel(nodes), u0);
-%         u_imp = imp_choices(randi(numel(imp_choices)));
-%         node_tx = nodes(u_imp);
-%     else
-%         node_tx = nodes(u0); % fallback if only one node exists
-%     end
-% end
 
 u_tx = u0;
 

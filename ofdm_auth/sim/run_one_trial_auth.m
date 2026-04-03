@@ -175,21 +175,9 @@ end
 out.accept_perm = frame_decision_votes(Vperm, L, cfg.alpha);
 out.accept_im   = frame_decision_votes(Vim,   L, cfg.alpha);
 out.accept_hybrid = out.accept_perm && out.accept_im;
-% out.accept_perm = logical(frame_decision_votes(Vperm, L, cfg.alpha));
-% out.accept_im   = logical(frame_decision_votes(Vim,   L, cfg.alpha));
-% out.accept_hybrid = out.accept_perm && out.accept_im;
 out.u_tx = u_tx;
 
 out.Tp = Tp;
 out.Tim = Tim;
-% 
-% tx_active = find(pilot_mask_local(:) > 0);                  % TX active positions
-% rx_active = find(map_rx.pilot_mask_local(:) > 0);           % verifier predicted active positions
-% 
-% overlap = numel(intersect(tx_active, rx_active));
-% fprintf('ell=%d  TX active=%s  RX active=%s  overlap=%d\n', ...
-%     ell, mat2str(tx_active.'), mat2str(rx_active.'), overlap);
 
-%fprintf('permutation mean: %d std: 5d\n', mean(out.Tp), std(out.Tp));
-%fprintf('IM mean: %d std: 5d\n', mean(out.Tim), std(out.Tim));
 end
