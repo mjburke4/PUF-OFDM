@@ -1,4 +1,4 @@
-function fig_far_frr_vs_L_all_pretty()
+function fig_far_frr_vs_L_all_pretty_v2()
 
 %% =========================
 % Common sweep settings
@@ -158,26 +158,59 @@ Ldiff_cal = cfgD_cal.Lsym - 1;
 VmaxD     = floor(Vmax_frac * Ldiff_cal);
 
 tauD_grid = linspace(0.60, 1.00, 81);
+best_tauD   = tauD_grid(1);
+bestFRR_cal = inf;
+bestFAR_cal = inf;
 
-best_tauD = tauD_grid(end);
 for tau = tauD_grid
-    cfgTmp = cfgD_cal;
+    cfgTmp = cfg_cal;
     cfgTmp.tauD = tau;
 
-    acc = 0; Vsum = 0;
+    % H0 -> FAR
+    acc = 0;
     for t = 1:MC_cal
         o = run_one_trial_dppa(cfgTmp, nodes, u0, SNR_cal, false);
-        acc  = acc  + o.accept_dppa;
-        Vsum = Vsum + o.Vd_H1;
+        acc = acc + o.accept_dppa;
     end
-    FAR_here = acc/MC_cal;
-    Vmean    = Vsum/MC_cal;
+    FAR_here = acc / MC_cal;
 
-    if (FAR_here <= targetFAR) && (Vmean <= VmaxD)
-        best_tauD = tau;
-        break;
+    % H1 -> FRR
+    rej = 0;
+    for t = 1:MC_cal
+        o = run_one_trial_dppa(cfgTmp, nodes, u0, SNR_cal, true);
+        rej = rej + (~o.accept_dppa);
+    end
+    FRR_here = rej / MC_cal;
+
+    % choose the lowest FRR among thresholds that satisfy FAR target
+    if (FAR_here <= targetFAR) && (FRR_here < bestFRR_cal)
+        best_tauD   = tau;
+        bestFRR_cal = FRR_here;
+        bestFAR_cal = FAR_here;
     end
 end
+
+fprintf('DPPA calibrated tauD=%.4f, FAR=%.4f, FRR=%.4f at %g dB\n', ...
+    best_tauD, bestFAR_cal, bestFRR_cal, SNR_cal);
+% best_tauD = tauD_grid(end);
+% for tau = tauD_grid
+%     cfgTmp = cfgD_cal;
+%     cfgTmp.tauD = tau;
+% 
+%     acc = 0; Vsum = 0;
+%     for t = 1:MC_cal
+%         o = run_one_trial_dppa(cfgTmp, nodes, u0, SNR_cal, false);
+%         acc  = acc  + o.accept_dppa;
+%         Vsum = Vsum + o.Vd_H1;
+%     end
+%     FAR_here = acc/MC_cal;
+%     Vmean    = Vsum/MC_cal;
+% 
+%     if (FAR_here <= targetFAR) && (Vmean <= VmaxD)
+%         best_tauD = tau;
+%         break;
+%     end
+% end
 
 cfgD.tauD = best_tauD;
 
