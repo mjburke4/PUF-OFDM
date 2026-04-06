@@ -1,9 +1,10 @@
 function fig_far_frr_vs_tau_dppa()
 addpath 'C:\Users\michael.j.burke10\OneDrive - US Army\Desktop\Grad school stuff\PUF based dynamic spreading code generation\simulations\PUF_Modulation_ofdm_Sim\PUF-OFDM\ofdm_auth\lib'
 addpath 'C:\Users\michael.j.burke10\OneDrive - US Army\Desktop\Grad school stuff\PUF based dynamic spreading code generation\simulations\PUF_Modulation_ofdm_Sim\PUF-OFDM\ofdm_auth\cfg'
+addpath 'C:\Users\michael.j.burke10\OneDrive - US Army\Desktop\Grad school stuff\PUF based dynamic spreading code generation\simulations\PUF_Modulation_ofdm_Sim\PUF-OFDM\ofdm_auth\sim'
 cfg = cfg_default_dppa();
 cfg.Lsym = 8;
-cfg.alpha = 0.75;
+cfg.alpha = 0.6; %0.75;
 
 U = 10;
 nodes = init_node_population(U, cfg.m, 'seed', 7);

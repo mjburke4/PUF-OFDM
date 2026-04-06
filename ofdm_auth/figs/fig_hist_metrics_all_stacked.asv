@@ -1,0 +1,230 @@
+function fig_hist_metrics_all_stacked()
+
+% ============================================================
+% Combined stacked histogram figure for Permutation / IM / DPPA
+% H1 vs H0 distributions at one representative SNR
+% ============================================================
+addpath 'C:\Users\michael.j.burke10\OneDrive - US Army\Desktop\Grad school stuff\PUF based dynamic spreading code generation\simulations\PUF_Modulation_ofdm_Sim\PUF-OFDM\ofdm_auth\lib'
+addpath 'C:\Users\michael.j.burke10\OneDrive - US Army\Desktop\Grad school stuff\PUF based dynamic spreading code generation\simulations\PUF_Modulation_ofdm_Sim\PUF-OFDM\ofdm_auth\cfg'
+addpath 'C:\Users\michael.j.burke10\OneDrive - US Army\Desktop\Grad school stuff\PUF based dynamic spreading code generation\simulations\PUF_Modulation_ofdm_Sim\PUF-OFDM\ofdm_auth\sim'
+%% ---------------- Common settings ----------------
+SNRref_dB = 15;         % change to 15 for cleaner separation
+Nsamp_sym = 15000;      % per-symbol samples for Perm / IM
+Nframes_d = 4000;       % DPPA frames (each gives L-1 differential samples)
+
+rng(1);
+
+%% ---------------- Perm / IM setup ----------------
+cfg = cfg_default();
+cfg.chan.type = 'awgn';
+cfg.Lsym  = 8;
+cfg.alpha = 0.75;
+
+U = 10; 
+m = 64;
+B = 64;
+nodes = init_node_population(U, m, 'seed', 7);
+
+% Fix distance so SNRref is actual receive SNR at d0
+d0 = 10;
+for u = 1:U
+    nodes(u).distance_m = d0;
+end
+u0 = 3;
+
+Tp_H1  = zeros(1, Nsamp_sym);
+Tp_H0  = zeros(1, Nsamp_sym);
+Tim_H1 = zeros(1, Nsamp_sym);
+Tim_H0 = zeros(1, Nsamp_sym);
+
+for n = 1:Nsamp_sym
+    ell = 1;
+
+    C_seed = randi([0 1], 1, m);
+    nonce_frame = randi([0 1], 1, 32);
+
+    [X, Xp, meta] = gen_ofdm_symbol(cfg);
+
+    % ---------------- H1: Legit TX ----------------
+    map_tx = verifier_mapping_apuf_sym(nodes(u0), C_seed, nonce_frame, ell, B, ...
+        cfg.Npilots, cfg.K_active_pilots);
+
+    [Xtilde, ~, ~] = apply_structure_operator_pilots( ...
+        X, Xp, meta, map_tx.pilot_perm_local, map_tx.pilot_mask_local);
+
+    x = ifft(Xtilde, cfg.Nfft);
+    x_cp = [x(end-cfg.Ncp+1:end); x];
+
+    Pref = mean(abs(x_cp).^2);
+    noise_pow = Pref / (10^(SNRref_dB/10));
+
+    [y_cp, ~] = channel_model(cfg, x_cp);
+    w = sqrt(noise_pow/2) * (randn(size(y_cp)) + 1j*randn(size(y_cp)));
+    r_cp = y_cp + w;
+
+    r = r_cp(cfg.Ncp+1:end);
+    Y = fft(r, cfg.Nfft);
+    Z = Y;
+
+    map_rx = verifier_mapping_apuf_sym(nodes(u0), C_seed, nonce_frame, ell, B, ...
+        cfg.Npilots, cfg.K_active_pilots);
+
+    [~, templ_rx, st_rx] = apply_structure_operator_pilots( ...
+        X, Xp, meta, map_rx.pilot_perm_local, map_rx.pilot_mask_local);
+
+    Tc = metric_perm_correlator_activepilots(Z, templ_rx, st_rx.Atilde);
+    Tp_H1(n) = real(Tc);
+
+    Tim_H1(n) = metric_im_energysep_pilots(Z, meta.pilot_idx, st_rx.Atilde);
+
+    % ---------------- H0: Impostor TX ----------------
+    seed_u32 = uint32(randi([0, 2^32-1]));
+    pilot_perm_local = perm_from_seed(seed_u32, cfg.Npilots);
+    pilot_mask_local = mask_from_seed(seed_u32, cfg.Npilots, cfg.K_active_pilots);
+
+    [Xtilde0, ~, ~] = apply_structure_operator_pilots( ...
+        X, Xp, meta, pilot_perm_local, pilot_mask_local);
+
+    x0 = ifft(Xtilde0, cfg.Nfft);
+    x0_cp = [x0(end-cfg.Ncp+1:end); x0];
+
+    Pref0 = mean(abs(x0_cp).^2);
+    noise_pow0 = Pref0 / (10^(SNRref_dB/10));
+
+    [y0_cp, ~] = channel_model(cfg, x0_cp);
+    w0 = sqrt(noise_pow0/2) * (randn(size(y0_cp)) + 1j*randn(size(y0_cp)));
+    r0_cp = y0_cp + w0;
+
+    r0 = r0_cp(cfg.Ncp+1:end);
+    Y0 = fft(r0, cfg.Nfft);
+    Z0 = Y0;
+
+    Tc0 = metric_perm_correlator_activepilots(Z0, templ_rx, st_rx.Atilde);
+    Tp_H0(n) = real(Tc0);
+
+    Tim_H0(n) = metric_im_energysep_pilots(Z0, meta.pilot_idx, st_rx.Atilde);
+end
+
+%% ---------------- DPPA setup ----------------
+cfgD = cfg_default_dppa();
+cfgD.chan.type = 'awgn';
+cfgD.Lsym  = 8;
+cfgD.alpha = 0.6; %0.75;
+
+% For consistency with WLAN-like story, you may want:
+% cfgD.Npilots = 4;
+
+Ldiff = cfgD.Lsym - 1;
+
+Td_H1_all = zeros(1, Nframes_d * Ldiff);
+Td_H0_all = zeros(1, Nframes_d * Ldiff);
+
+idx1 = 1;
+idx0 = 1;
+
+for n = 1:Nframes_d
+    % Legit trial
+    o1 = run_one_trial_dppa(cfgD, nodes, u0, SNRref_dB, true);
+    k1 = numel(o1.Td_H1);
+    Td_H1_all(idx1:idx1+k1-1) = o1.Td_H1;
+    idx1 = idx1 + k1;
+
+    % Impostor trial
+    o0 = run_one_trial_dppa(cfgD, nodes, u0, SNRref_dB, false);
+    k0 = numel(o0.Td_H1);   % compare verifier statistic under claimed hypothesis
+    Td_H0_all(idx0:idx0+k0-1) = o0.Td_H1;
+    idx0 = idx0 + k0;
+end
+
+Td_H1_all = Td_H1_all(1:idx1-1);
+Td_H0_all = Td_H0_all(1:idx0-1);
+
+%% ---------------- Plot styling ----------------
+fig = figure('Color','w', 'Position', [120 80 700 950]);
+tl = tiledlayout(3,1, 'TileSpacing','compact', 'Padding','compact');
+
+axFS = 12;
+titleFS = 13;
+sgFS = 14;
+
+faceAlpha0 = 0.38;
+faceAlpha1 = 0.38;
+edgeAlpha  = 0.20;
+
+%% ---------------- (a) Permutation ----------------
+nexttile; hold on; grid on; box on;
+
+edgesP = linspace(min([Tp_H0 Tp_H1]), max([Tp_H0 Tp_H1]), 50);
+
+hP0 = histogram(Tp_H0, edgesP, ...
+    'Normalization','pdf', ...
+    'FaceAlpha',faceAlpha0, ...
+    'EdgeAlpha',edgeAlpha);
+
+hP1 = histogram(Tp_H1, edgesP, ...
+    'Normalization','pdf', ...
+    'FaceAlpha',faceAlpha1, ...
+    'EdgeAlpha',edgeAlpha);
+
+xlabel('Permutation statistic, T^{(P)}', 'FontSize', axFS);
+ylabel('Density', 'FontSize', axFS);
+title('(a) Permutation', 'FontWeight','bold', 'FontSize', titleFS);
+set(gca, 'FontSize', axFS, 'LineWidth', 1.0);
+
+%% ---------------- (b) IM ----------------
+nexttile; hold on; grid on; box on;
+
+edgesIM = linspace(min([Tim_H0 Tim_H1]), max([Tim_H0 Tim_H1]), 50);
+
+hIM0 = histogram(Tim_H0, edgesIM, ...
+    'Normalization','pdf', ...
+    'FaceAlpha',faceAlpha0, ...
+    'EdgeAlpha',edgeAlpha);
+
+hIM1 = histogram(Tim_H1, edgesIM, ...
+    'Normalization','pdf', ...
+    'FaceAlpha',faceAlpha1, ...
+    'EdgeAlpha',edgeAlpha);
+
+xlabel('IM statistic, T^{(IM)}', 'FontSize', axFS);
+ylabel('Density', 'FontSize', axFS);
+title('(b) Index Modulation', 'FontWeight','bold', 'FontSize', titleFS);
+set(gca, 'FontSize', axFS, 'LineWidth', 1.0);
+
+%% ---------------- (c) DPPA ----------------
+nexttile; hold on; grid on; box on;
+
+edgesD = linspace(-1, 1, 50);
+
+hD0 = histogram(Td_H0_all, edgesD, ...
+    'Normalization','pdf', ...
+    'FaceAlpha',faceAlpha0, ...
+    'EdgeAlpha',edgeAlpha);
+
+hD1 = histogram(Td_H1_all, edgesD, ...
+    'Normalization','pdf', ...
+    'FaceAlpha',faceAlpha1, ...
+    'EdgeAlpha',edgeAlpha);
+
+xlabel('DPPA statistic, T^{(D)}', 'FontSize', axFS);
+ylabel('Density', 'FontSize', axFS);
+title('(c) DPPA', 'FontWeight','bold', 'FontSize', titleFS);
+set(gca, 'FontSize', axFS, 'LineWidth', 1.0);
+
+%% ---------------- Shared title + legend ----------------
+sgtitle(tl, sprintf('H_1 / H_0 Metric Distributions at SNR = %g dB', SNRref_dB), ...
+    'FontWeight','bold', 'FontSize', sgFS);
+
+lgd = legend([hP0 hP1], {'H_0 (impostor)', 'H_1 (legit)'}, ...
+    'Orientation','horizontal', ...
+    'Location','southoutside', ...
+    'FontSize', 11);
+lgd.Layout.Tile = 'south';
+
+%% ---------------- Quick summary print ----------------
+fprintf('SNR=%g dB:\n', SNRref_dB);
+fprintf('  Perm: mean H1=%.3f, mean H0=%.3f\n', mean(Tp_H1), mean(Tp_H0));
+fprintf('  IM  : mean H1=%.3f, mean H0=%.3f\n', mean(Tim_H1), mean(Tim_H0));
+fprintf('  DPPA: mean H1=%.3f, mean H0=%.3f\n', mean(Td_H1_all), mean(Td_H0_all));
+
+end
