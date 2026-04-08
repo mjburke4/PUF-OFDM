@@ -8,7 +8,7 @@ SNR_list = [-5 5 15 25];
 MC = 6000; %2000;
 
 % Calibration settings
-SNR_cal   = 15;
+SNR_cal   = 5;
 L_cal     = 16; %8;
 MC_cal    = 3000; %3000;
 targetFAR = 0.01;
@@ -109,10 +109,11 @@ cfgD.alpha = alpha;
 cfgD.Lsym  = L_cal;
 
 % Optional WLAN consistency:
-% cfgD.Npilots = 4;
+cfgD.Npilots = 4;
 
 % Strongly consider using richer phase alphabet for replay robustness:
-cfgD.phi_choices_deg = [-28 -10 10 28];
+%cfgD.phi_choices_deg = [-28 -10 10 28];
+cfgD.phi_choices_deg = [-28 28];
 
 tauD_grid = linspace(0.60, 1.00, 81);
 
