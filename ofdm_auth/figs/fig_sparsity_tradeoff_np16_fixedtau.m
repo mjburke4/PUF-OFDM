@@ -4,7 +4,7 @@ cfg = cfg_default();
 cfg.chan.type = 'awgn';
 
 cfg.Nfft = 64;
-cfg.Npilots = 8;
+cfg.Npilots = 4;
 
 % Operating point for this figure
 SNRref = 5;          % stress test (try 10 if curves are too noisy)

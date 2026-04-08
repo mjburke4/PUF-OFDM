@@ -11,7 +11,7 @@ SNRref = 0;                % stress test
 cfg.Lsym  = 16;
 cfg.alpha = 0.75;
 
-MC = 5000;
+MC = 6000;
 MC_cal = 3000;
 targetFAR = 0.01;
 

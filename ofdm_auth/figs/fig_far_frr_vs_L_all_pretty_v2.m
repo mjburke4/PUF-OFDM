@@ -8,7 +8,7 @@ L_list   = [4 8 16 32 64];
 MC       = 6000;
 
 alpha     = 0.75;
-L_cal     = 8;
+L_cal     = 16; %8;
 SNR_cal   = 15;
 MC_cal    = 3000;
 targetFAR = 0.01;

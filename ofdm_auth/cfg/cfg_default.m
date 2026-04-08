@@ -15,7 +15,7 @@ cfg.Npilots = 4;
 cfg.mod = 'BPSK'; %'QPSK';
 
 % Frame/voting
-cfg.Lsym = 8; %32;        % OFDM symbols per frame
+cfg.Lsym = 16; %32;        % OFDM symbols per frame
 cfg.alpha = 0.75;     % vote fraction threshold
 
 cfg.adv_mode = 'impostor_othernode'; %'impostor_random';   % options:
