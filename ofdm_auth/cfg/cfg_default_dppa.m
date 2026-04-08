@@ -12,6 +12,7 @@ function cfg = cfg_default_dppa()
 
     % Pilot / DPPA settings
     cfg.Npilots = 4; % for simulations %4;
+
     cfg.phi_choices_deg = [-28 +28];%[-28 -10 10 28]; %[-25 +25]; %[-8 +8];   % start with the OTA-friendly alphabet
 
     % Channel / noise

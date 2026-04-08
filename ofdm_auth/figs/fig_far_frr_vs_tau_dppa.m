@@ -3,7 +3,9 @@ addpath 'C:\Users\michael.j.burke10\OneDrive - US Army\Desktop\Grad school stuff
 addpath 'C:\Users\michael.j.burke10\OneDrive - US Army\Desktop\Grad school stuff\PUF based dynamic spreading code generation\simulations\PUF_Modulation_ofdm_Sim\PUF-OFDM\ofdm_auth\cfg'
 addpath 'C:\Users\michael.j.burke10\OneDrive - US Army\Desktop\Grad school stuff\PUF based dynamic spreading code generation\simulations\PUF_Modulation_ofdm_Sim\PUF-OFDM\ofdm_auth\sim'
 cfg = cfg_default_dppa();
+
 cfg.Lsym = 16;
+
 cfg.alpha = 0.75;
 
 U = 10;
@@ -61,4 +63,4 @@ for s = 1:length(SNR_list)
 end
 legend(legendStrings, 'Location', 'best');
 
-end
+!git add .end
