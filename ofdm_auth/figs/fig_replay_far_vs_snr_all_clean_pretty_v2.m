@@ -1,16 +1,18 @@
 function fig_replay_far_vs_snr_all_clean_pretty_v2()
+    addpath 'C:\Users\michael.j.burke10\OneDrive - US Army\Desktop\Grad school stuff\PUF based dynamic spreading code generation\simulations\PUF_Modulation_ofdm_Sim\PUF-OFDM\ofdm_auth\lib'
+    addpath 'C:\Users\michael.j.burke10\OneDrive - US Army\Desktop\Grad school stuff\PUF based dynamic spreading code generation\simulations\PUF_Modulation_ofdm_Sim\PUF-OFDM\ofdm_auth\cfg'
 
 %% =========================
 % Common settings
 % ==========================
 alpha = 0.75;
 SNR_list = [-5 5 15 25];
-MC = 6000; %2000;
+MC = 8000; %2000;
 
 % Calibration settings
 SNR_cal   = 5;
 L_cal     = 16; %8;
-MC_cal    = 3000; %3000;
+MC_cal    = 5000; %3000;
 targetFAR = 0.01;
 p_cal     = 0;
 
