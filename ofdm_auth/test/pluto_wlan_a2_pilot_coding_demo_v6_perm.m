@@ -1,9 +1,9 @@
-clear; clc; %close all;
+clear; close all;
 
-Ntrials = 20;
+Ntrials = 40;
 fc_list = [350e6];
-tau_p   = 0.95;    % starter value, tune later
-alpha   = 0.6; %0.75;
+tau_p   = 0.15;    % starter value, tune later
+alpha   = 0.75;
 
 results = repmat(struct( ...
     'trial', [], ...
@@ -26,7 +26,11 @@ results = repmat(struct( ...
     'Tp_H1', [], ...
     'Tp_H0', [], ...
     'ok', false, ...
+    'Tp_H1_auth', [], ...
+    'Tp_H0_auth', [], ...
     'errmsg', ''), Ntrials, 1);
+
+
 
 fprintf('\n===== STARTING CONSTRAINED PERM OTA RUN =====\n');
 
@@ -63,6 +67,8 @@ for k = 1:Ntrials
         results(k).Tp_H1      = res.Tp_H1;
         results(k).Tp_H0      = res.Tp_H0;
         results(k).ok         = true;
+        results(k).Tp_H1_auth = res.Tp_H1_auth;
+        results(k).Tp_H0_auth = res.Tp_H0_auth;
         results(k).errmsg     = '';
 
         fprintf('Trial %d summary: BER=%.3e, Tp_H1=%.3f, Tp_H0=%.3f, acc(H1/H0)=%d/%d\n', ...
@@ -103,3 +109,15 @@ fprintf('H1 acceptance rate     = %.3f\n', mean(accH1_vec));
 fprintf('H0 acceptance rate     = %.3f\n', mean(accH0_vec));
 fprintf('Mean payload Lsym      = %.1f\n', mean(Lsym_vec));
 fprintf('Mean auth-window Lauth = %.1f\n', mean(Lauth_vec));
+
+tau_grid   = 0.0:0.01:1.0;
+alpha_grid = 0.4:0.05:0.95;
+
+S_perm = ota_postprocess_method(results, ...
+    'Permutation', ...
+    'Tp_H1_auth', ...
+    'Tp_H0_auth', ...
+    tau_grid, ...
+    alpha_grid);
+
+save('results_perm.mat','results','S_perm');

@@ -1,0 +1,268 @@
+function res = run_one_dppa_trial(fc, tau_d, alpha, phi_choices_deg)
+
+    %% ------------ USER SETTINGS ------------
+    txID = 'usb:0';
+    rxID = 'usb:1';
+
+    fs = 20e6;
+    txGain = -3;
+    rxGain = 45;
+    enablePilotCoding = true;
+
+    samplesPerFrame = 300000;
+    pauseTX = 0.2;
+
+    %% ------------ WLAN config ------------
+    cfgNonHT = wlanNonHTConfig;
+    cfgNonHT.ChannelBandwidth = 'CBW20';
+    cfgNonHT.MCS = 1;
+    cfgNonHT.NumTransmitAntennas = 1;
+
+    psduLen = 400;
+    cfgNonHT.PSDULength = psduLen;
+
+    psdu = randi([0 1], 8*cfgNonHT.PSDULength, 1, 'int8');
+
+    ind = wlanFieldIndices(cfgNonHT);
+    pktLen = ind.NonHTData(2);
+    idleTime = 200e-6;
+
+    %% ------------ PUF node setup ------------
+    U = 1;
+    u0 = 1;
+    m = 64;
+    B = 64;
+
+    nodes = init_node_population(U, m, 'puf_bits', 128, 'seed', 7);
+    node = nodes(u0);
+    node_claimed = node;
+
+    C_seed = randi([0 1], 1, node.m);
+    nonce_frame = randi([0 1], 1, 32);
+
+    %% ------------ Waveform generation ------------
+    waveform_uncoded = wlanWaveformGenerator(psdu, cfgNonHT, 'IdleTime', idleTime);
+    txPilotsBase = extractPayloadPilotsFromWaveform(waveform_uncoded, cfgNonHT);
+
+    waveform = waveform_uncoded;
+    if enablePilotCoding
+        waveform = applyPilotSignCodingNonHT(waveform, cfgNonHT, node, C_seed, nonce_frame, B, phi_choices_deg);
+    end
+
+    guard = zeros(round(500e-6*fs),1);
+    waveform = [guard; waveform; guard];
+    waveform = 0.6 * waveform / max(abs(waveform)+1e-12);
+
+    %% ------------ Pluto TX/RX objects ------------
+    tx = sdrtx('Pluto', ...
+        'RadioID', txID, ...
+        'CenterFrequency', fc, ...
+        'BasebandSampleRate', fs, ...
+        'Gain', txGain);
+
+    rx = sdrrx('Pluto', ...
+        'RadioID', rxID, ...
+        'CenterFrequency', fc, ...
+        'BasebandSampleRate', fs, ...
+        'SamplesPerFrame', samplesPerFrame, ...
+        'GainSource', 'Manual', ...
+        'Gain', rxGain, ...
+        'OutputDataType', 'double');
+
+    cleaner = onCleanup(@() cleanup_radios(tx, rx));
+
+    %% ------------ TX/RX capture ------------
+    transmitRepeat(tx, waveform);
+    pause(pauseTX);
+
+    maxTries = 8;
+    pktStart = [];
+    coarseCFO = NaN;
+    y = [];
+
+    for attempt = 1:maxTries
+        y = rx();
+        rxMaxAmp = max(abs(y));
+
+        pktStartCand = wlanPacketDetect(y, cfgNonHT.ChannelBandwidth);
+        if isempty(pktStartCand)
+            fprintf('Attempt %d: no packet detected\n', attempt);
+            continue;
+        end
+
+        pktStart = pktStartCand(1);
+        yPktTry = y(pktStart:end);
+        coarseCFOTry = wlanCoarseCFOEstimate(yPktTry, cfgNonHT.ChannelBandwidth);
+
+        if abs(coarseCFOTry) > 50e3
+            fprintf('Attempt %d: bad packet detect (CFO %.1f Hz)\n', attempt, coarseCFOTry);
+            continue;
+        end
+
+        coarseCFO = coarseCFOTry;
+        fprintf('Attempt %d: pktStart=%d coarseCFO=%.1f Hz\n', attempt, pktStart, coarseCFO);
+        break;
+    end
+
+    if isempty(pktStart)
+        error('Failed to lock onto valid packet.');
+    end
+
+    yPkt = y(pktStart:end);
+    yPkt = frequencyOffset(yPkt, fs, -coarseCFO);
+
+    if numel(yPkt) < pktLen
+        error('Captured packet too short.');
+    end
+
+    fineCFO = wlanFineCFOEstimate(yPkt, cfgNonHT.ChannelBandwidth);
+    yPkt = frequencyOffset(yPkt, fs, -fineCFO);
+
+    symOffset = wlanSymbolTimingEstimate(yPkt(1:min(20000,end)), cfgNonHT.ChannelBandwidth);
+
+    %% ------------ Channel estimation ------------
+    rxLLTF = yPkt(ind.LLTF(1):ind.LLTF(2), :);
+    lltfDemod = wlanLLTFDemodulate(rxLLTF, cfgNonHT);
+    chanEst = wlanLLTFChannelEstimate(lltfDemod, cfgNonHT);
+    noiseEst = wlanLLTFNoiseEstimate(lltfDemod);
+
+    ofdmInfo = wlanNonHTOFDMInfo('NonHT-Data', cfgNonHT);
+    Nfft = ofdmInfo.FFTLength;
+    Ncp  = ofdmInfo.CPLength;
+    activeFFT  = ofdmInfo.ActiveFFTIndices;
+    pilotIdx52 = ofdmInfo.PilotIndices;
+    dataIdx52  = ofdmInfo.DataIndices;
+
+    symLen = Nfft + Ncp;
+
+    rxData = yPkt(ind.NonHTData(1):ind.NonHTData(2), :);
+    numSym = floor(size(rxData,1)/symLen);
+
+    H = squeeze(chanEst(:,1,1));
+
+    rxPilotsEq = zeros(numel(pilotIdx52), numSym);
+    rxDataEq   = zeros(numel(dataIdx52),  numSym);
+
+    for ell = 1:numSym
+        seg = rxData((ell-1)*symLen + (1:symLen), 1);
+        seg = seg(Ncp+1:end);
+        Y = fft(seg, Nfft);
+        Yact = Y(activeFFT);
+        Zeq = Yact ./ (H + 1e-12);
+        rxPilotsEq(:,ell) = Zeq(pilotIdx52);
+        rxDataEq(:,ell)   = Zeq(dataIdx52);
+    end
+
+    %% ------------ Differential DPPA detector ------------
+    u_meas = zeros(1,numSym);
+    phiH1_deg = zeros(1,numSym);
+    phiH0_deg = zeros(1,numSym);
+
+    for ell = 1:numSym
+        z = rxPilotsEq(:,ell);
+        p_nom = txPilotsBase(:,ell);
+
+        u_meas(ell) = (p_nom' * z) / (norm(p_nom)^2 + 1e-12);
+
+        nonce_bits_H1 = nonce_with_symbol(nonce_frame, ell, 16);
+        C_eff_H1      = mix_challenge_nonce(C_seed, nonce_bits_H1, length(C_seed));
+        R_H1          = get_puf_bits(node_claimed, C_eff_H1, B);
+        seed_H1       = hash_bits_u32(R_H1);
+        phiH1_deg(ell)= phase_from_seed(seed_H1, phi_choices_deg);
+
+        nonce_frame_H0 = [1 - nonce_frame(1), nonce_frame(2:end)];
+        nonce_bits_H0  = nonce_with_symbol(nonce_frame_H0, ell, 16);
+        C_eff_H0       = mix_challenge_nonce(C_seed, nonce_bits_H0, length(C_seed));
+        R_H0           = get_puf_bits(node_claimed, C_eff_H0, B);
+        seed_H0        = hash_bits_u32(R_H0);
+        phiH0_deg(ell) = phase_from_seed(seed_H0, phi_choices_deg);
+    end
+
+    Td_H1 = zeros(1,numSym-1);
+    Td_H0 = zeros(1,numSym-1);
+    dErr_H1_deg = zeros(1,numSym-1);
+    dErr_H0_deg = zeros(1,numSym-1);
+
+    for ell = 2:numSym
+        d_meas = u_meas(ell) * conj(u_meas(ell-1));
+        dphi_meas = angle(d_meas);
+
+        dphi_H1 = deg2rad(phiH1_deg(ell) - phiH1_deg(ell-1));
+        dphi_H0 = deg2rad(phiH0_deg(ell) - phiH0_deg(ell-1));
+
+        e1 = angle(exp(1j*(dphi_meas - dphi_H1)));
+        e0 = angle(exp(1j*(dphi_meas - dphi_H0)));
+
+        Td_H1(ell-1) = cos(e1);
+        Td_H0(ell-1) = cos(e0);
+
+        dErr_H1_deg(ell-1) = rad2deg(e1);
+        dErr_H0_deg(ell-1) = rad2deg(e0);
+    end
+
+    %% ------------ DPPA frame decision ------------
+    % Ldiff = numel(Td_H1);
+    % VH1 = sum(Td_H1 >= tau_d);
+    % VH0 = sum(Td_H0 >= tau_d);
+    % 
+    % acceptH1 = (VH1 >= ceil(alpha * Ldiff));
+    % acceptH0 = (VH0 >= ceil(alpha * Ldiff));
+    %% ------------ Authentication window length ------------
+    Lauth = 16;   % match IM/Perm and simulation comparison
+    
+    % DPPA has numSym-1 differential observations
+    Lauth_eff = min(Lauth, numel(Td_H1));
+    
+    Td_H1_auth = Td_H1(1:Lauth_eff);
+    Td_H0_auth = Td_H0(1:Lauth_eff);
+    
+    dErr_H1_auth_deg = dErr_H1_deg(1:Lauth_eff);
+    dErr_H0_auth_deg = dErr_H0_deg(1:Lauth_eff);
+    
+    %% ------------ DPPA frame decision ------------
+    VH1 = sum(Td_H1_auth >= tau_d);
+    VH0 = sum(Td_H0_auth >= tau_d);
+    
+    acceptH1 = (VH1 >= ceil(alpha * Lauth_eff));
+    acceptH0 = (VH0 >= ceil(alpha * Lauth_eff));
+
+    %% ------------ BER ------------
+    [rxPSDU, ~, ~] = wlanNonHTDataRecover(rxData, chanEst, noiseEst, cfgNonHT);
+    L = min(numel(psdu), numel(rxPSDU));
+    numErr = sum(rxPSDU(1:L) ~= psdu(1:L));
+    ber = numErr / L;
+
+    %% ------------ Pack results ------------
+    res = struct();
+    res.fc = fc;
+    res.ber = ber;
+    res.numErr = numErr;
+    res.Lbits = L;
+    % res.TdH1_mean = mean(Td_H1);
+    % res.TdH0_mean = mean(Td_H0);
+    % res.dErrH1_mean_deg = mean(abs(dErr_H1_deg));
+    % res.dErrH0_mean_deg = mean(abs(dErr_H0_deg));
+    res.VH1 = VH1;
+    res.VH0 = VH0;
+    %res.Ldiff = Ldiff;
+    res.acceptH1 = acceptH1;
+    res.acceptH0 = acceptH0;
+    res.pktStart = pktStart;
+    res.coarseCFO = coarseCFO;
+    res.fineCFO = fineCFO;
+    res.rxMaxAmp = rxMaxAmp;
+    res.Td_H1 = Td_H1;
+    res.Td_H0 = Td_H0;
+    res.TdH1_mean = mean(Td_H1_auth);
+    res.TdH0_mean = mean(Td_H0_auth);
+    res.dErrH1_mean_deg = mean(abs(dErr_H1_auth_deg));
+    res.dErrH0_mean_deg = mean(abs(dErr_H0_auth_deg));
+res.Lsym  = numSym;       % full payload OFDM symbols
+res.Ldiff = numel(Td_H1); % full differential observations
+res.Lauth = Lauth_eff;    % observations actually used for auth
+res.Td_H1_auth = Td_H1_auth;
+res.Td_H0_auth = Td_H0_auth;
+    
+
+   
+end

@@ -1,6 +1,6 @@
 clear; clc; close all;
 
-Ntrials = 5;
+Ntrials = 20;
 fc_list = [350e6];
 tau_p   = 0.35;
 alpha   = 0.75;

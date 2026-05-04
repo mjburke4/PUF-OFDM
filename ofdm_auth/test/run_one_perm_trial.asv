@@ -43,19 +43,16 @@ function res = run_one_perm_trial(fc, tau_p, alpha)
     %% ------------ Constrained permutation config ------------
     % perm_cfg.fixedPilotLocalIdx = [1 4];
     % perm_cfg.authPilotLocalIdx  = [2 3];
-    %    perm_cfg.fixedPilotLocalIdx = [2 3];
-    %perm_cfg.authPilotLocalIdx  = [1 4];
+        perm_cfg.fixedPilotLocalIdx = [2 3];
+    perm_cfg.authPilotLocalIdx  = [1 4];
 
-    %   perm_cfg.fixedPilotLocalIdx = [1 3];
-    % perm_cfg.authPilotLocalIdx  = [2 4];
-    % 
     % perm_cfg.fixedPilotLocalIdx = [];        % keep only 1 fixed
     % perm_cfg.authPilotLocalIdx  = [1 2 3 4];    % 3 auth pilots
     % perm_cfg.fixedPilotLocalIdx = 1;
     % perm_cfg.authPilotLocalIdx  = [2 3 4];
 
-    perm_cfg.fixedPilotLocalIdx = 1;
-    perm_cfg.authPilotLocalIdx  = [2 3 4];
+    %perm_cfg.fixedPilotLocalIdx = 4;
+    %perm_cfg.authPilotLocalIdx  = [1 2 3];
 
     Lauth = 16;   % auth window for fairer comparison to sim
 
@@ -177,8 +174,7 @@ function res = run_one_perm_trial(fc, tau_p, alpha)
     fixedLocal = perm_cfg.fixedPilotLocalIdx(:).';
     authLocal  = perm_cfg.authPilotLocalIdx(:).';
 
-    %pilotWeights = [1.0, 0.35, 0.8, 0.2];   % MUST match TX
-    pilotWeights = [1, 1, 1, 1];   % MUST match TX
+    pilotWeights = [1.0, 0.35, 0.8, 0.2];   % MUST match TX
     samePerm = false(1,numSym);
 
 for ell = 1:numSym
@@ -204,9 +200,7 @@ for ell = 1:numSym
     else
         z_fix = z(fixedLocal);
         p_fix = p_nom(fixedLocal);
-        % theta_hat = angle(p_fix' * z_fix);
-        % z_corr = z * exp(-1j * theta_hat);
-        theta_hat = angle(p_nom' * z);   % use full pilot vector
+        theta_hat = angle(p_fix' * z_fix);
         z_corr = z * exp(-1j * theta_hat);
     end
 

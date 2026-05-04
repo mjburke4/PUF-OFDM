@@ -2,8 +2,8 @@ clear; clc; %close all;
 
 Ntrials = 20;
 fc_list = [350e6];
-tau_p   = 0.95;    % starter value, tune later
-alpha   = 0.6; %0.75;
+tau_p   = 0.0.;    % starter value, tune later
+alpha   = 0.75;
 
 results = repmat(struct( ...
     'trial', [], ...

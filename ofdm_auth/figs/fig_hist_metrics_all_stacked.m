@@ -229,4 +229,9 @@ fprintf('  Perm: mean H1=%.3f, mean H0=%.3f\n', mean(Tp_H1), mean(Tp_H0));
 fprintf('  IM  : mean H1=%.3f, mean H0=%.3f\n', mean(Tim_H1), mean(Tim_H0));
 fprintf('  DPPA: mean H1=%.3f, mean H0=%.3f\n', mean(Td_H1_all), mean(Td_H0_all));
 
+results_sim.perm_deltaT = mean(Tp_H1) - mean(Tp_H0);
+results_sim.im_deltaT   = mean(Tim_H1) - mean(Tim_H0);
+results_sim.dppa_deltaT = mean(Td_H1_all) - mean(Td_H0_all);
+
+save('results_sim.mat','results_sim')
 end

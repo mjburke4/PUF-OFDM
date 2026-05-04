@@ -1,14 +1,15 @@
-clear; clc; close all;
+clear; close all;
+addpath 'C:\Users\Mike B\OneDrive\Desktop\Grad School\Phd\Experiments\PUF_OFDM\PUF OFDM Repository\ofdm_auth\lib'
 
 %% ------------ Multi-trial settings ------------
-Ntrials   = 20;
+Ntrials   = 40;
 %fc_list   = [920e6 940e6 960e6];   % cycle frequencies to dodge interference
 fc_list   = [350e6];   % cycle frequencies to dodge interference
-tau_d     = 0.92;
+tau_d     = 0.75;
 alpha     = 0.75;
 
 % Keep your current good operating point
-phi_choices_deg = [-20, +20];
+phi_choices_deg = [-28, +28];
 
 results = repmat(struct( ...
     'trial', [], ...
@@ -22,7 +23,6 @@ results = repmat(struct( ...
     'dErrH0_mean_deg', [], ...
     'VH1', [], ...
     'VH0', [], ...
-    'Ldiff', [], ...
     'acceptH1', [], ...
     'acceptH0', [], ...
     'pktStart', [], ...
@@ -32,6 +32,11 @@ results = repmat(struct( ...
     'ok', false, ...
     'Td_H1', [], ...
     'Td_H0', [], ...
+    'Lsym', [], ...
+    'Ldiff', [], ...
+    'Lauth', [], ...
+    'Td_H1_auth', [], ...
+    'Td_H0_auth', [], ...
     'errmsg', ''), Ntrials, 1);
 
 fprintf('\n===== STARTING DPPA MULTI-TRIAL RUN =====\n');
@@ -68,6 +73,11 @@ for k = 1:Ntrials
     results(k).ok               = true;
     results(k).Td_H1            = res.Td_H1;
     results(k).Td_H0            = res.Td_H0;
+    results(k).Lsym             = res.Lsym;
+    results(k).Ldiff            = res.Ldiff;
+    results(k).Lauth            = res.Lauth;
+    results(k).Td_H1_auth = res.Td_H1_auth;
+    results(k).Td_H0_auth = res.Td_H0_auth;
     results(k).errmsg           = '';
     
     fprintf('Trial %d summary: BER=%.3e, Td_H1=%.3f, Td_H0=%.3f, acc(H1/H0)=%d/%d\n', ...
@@ -110,6 +120,7 @@ fprintf('Mean |dErr| H1 (deg)  = %.2f\n', mean(dH1_vec));
 fprintf('Mean |dErr| H0 (deg)  = %.2f\n', mean(dH0_vec));
 fprintf('H1 acceptance rate    = %.3f\n', mean(accH1_vec));
 fprintf('H0 acceptance rate    = %.3f\n', mean(accH0_vec));
+fprintf('Mean Lauth             = %.1f symbols\n', mean([results(ok_idx).Lauth]));
 
 %% ------------ Quick plots ------------
 figure;
@@ -148,24 +159,46 @@ ylabel('\DeltaT_d = mean(T_{d,H1}) - mean(T_{d,H0})');
 legend('Location','best');
 
 %% ------------ Optional table for easy inspection ------------
-T = table( ...
-    [results.trial].', ...
-    [results.fc].'/1e6, ...
-    [results.ok].', ...
-    [results.ber].', ...
-    [results.TdH1_mean].', ...
-    [results.TdH0_mean].', ...
-    [results.dErrH1_mean_deg].', ...
-    [results.dErrH0_mean_deg].', ...
-    [results.acceptH1].', ...
-    [results.acceptH0].', ...
-    'VariableNames', {'trial','fc_MHz','ok','BER','TdH1_mean','TdH0_mean','dErrH1_deg','dErrH0_deg','acceptH1','acceptH0'});
+% T = table( ...
+%     [results.trial].', ...
+%     [results.fc].'/1e6, ...
+%     [results.ok].', ...
+%     [results.ber].', ...
+%     [results.TdH1_mean].', ...
+%     [results.TdH0_mean].', ...
+%     [results.dErrH1_mean_deg].', ...
+%     [results.dErrH0_mean_deg].', ...
+%     [results.acceptH1].', ...
+%     [results.acceptH0].', ...
+%     'VariableNames', {'trial','fc_MHz','ok','BER','TdH1_mean','TdH0_mean','dErrH1_deg','dErrH0_deg','acceptH1','acceptH0'});
+% 
+% disp(T);
+%% ------------ Optional table for easy inspection ------------
 
-disp(T);
+ok_idx = find([results.ok]);
+
+T = table( ...
+    [results(ok_idx).trial].', ...
+    [results(ok_idx).fc].'/1e6, ...
+    [results(ok_idx).ok].', ...
+    [results(ok_idx).ber].', ...
+    [results(ok_idx).TdH1_mean].', ...
+    [results(ok_idx).TdH0_mean].', ...
+    [results(ok_idx).dErrH1_mean_deg].', ...
+    [results(ok_idx).dErrH0_mean_deg].', ...
+    [results(ok_idx).Lsym].', ...
+    [results(ok_idx).Ldiff].', ...
+    [results(ok_idx).Lauth].', ...
+    [results(ok_idx).acceptH1].', ...
+    [results(ok_idx).acceptH0].', ...
+    'VariableNames', {'trial','fc_MHz','ok','BER','TdH1_mean','TdH0_mean', ...
+    'dErrH1_deg','dErrH0_deg','Lsym','Ldiff','Lauth','acceptH1','acceptH0'} );
+
+    disp(T);
 
 %% ------------ DPPA operating-point sweep ------------
-tau_grid   = 0.88:0.01:0.97;
-alpha_grid = 0.60:0.05:0.90;
+tau_grid   = 0.5:0.01:0.97;
+alpha_grid = 0.50:0.05:0.90;
 
 H1_acc_rate = zeros(numel(alpha_grid), numel(tau_grid));
 H0_acc_rate = zeros(numel(alpha_grid), numel(tau_grid));
@@ -185,9 +218,12 @@ for ia = 1:numel(alpha_grid)
         for n = 1:numel(ok_idx)
             r = results(ok_idx(n));
 
-            Ld = numel(r.Td_H1);
-            VH1_test = sum(r.Td_H1 >= tau_test);
-            VH0_test = sum(r.Td_H0 >= tau_test);
+            % Ld = numel(r.Td_H1);
+            % VH1_test = sum(r.Td_H1 >= tau_test);
+            % VH0_test = sum(r.Td_H0 >= tau_test);
+            Ld = numel(r.Td_H1_auth);
+            VH1_test = sum(r.Td_H1_auth >= tau_test);
+            VH0_test = sum(r.Td_H0_auth >= tau_test);
 
             accH1_tmp(n) = (VH1_test >= ceil(alpha_test * Ld));
             accH0_tmp(n) = (VH0_test >= ceil(alpha_test * Ld));
@@ -231,8 +267,10 @@ allTdH1 = [];
 allTdH0 = [];
 
 for n = 1:numel(ok_idx)
-    allTdH1 = [allTdH1, results(ok_idx(n)).Td_H1];
-    allTdH0 = [allTdH0, results(ok_idx(n)).Td_H0];
+    %allTdH1 = [allTdH1, results(ok_idx(n)).Td_H1];
+    %allTdH0 = [allTdH0, results(ok_idx(n)).Td_H0];
+    allTdH1 = [allTdH1, results(ok_idx(n)).Td_H1_auth];
+    allTdH0 = [allTdH0, results(ok_idx(n)).Td_H0_auth];
 end
 
 for k = 1:numel(tau_vec)
@@ -272,6 +310,24 @@ colorbar;
 xlabel('\tau_d');
 ylabel('\alpha');
 title('H0 acceptance rate');
+
+tau_grid   = 0.50:0.01:0.99;
+alpha_grid = 0.3:0.05:0.95;
+
+% S_dppa = ota_postprocess_method(results, ...
+%     'DPPA', ...
+%     'Td_H1', ...
+%     'Td_H0', ...
+%     tau_grid, ...
+%     alpha_grid);
+S_dppa = ota_postprocess_method(results, ...
+    'DPPA', ...
+    'Td_H1_auth', ...
+    'Td_H0_auth', ...
+    tau_grid, ...
+    alpha_grid);
+
+save('results_dppa.mat','results','S_dppa');
 
 function res = run_one_dppa_trial(fc, tau_d, alpha, phi_choices_deg)
 
@@ -477,11 +533,28 @@ function res = run_one_dppa_trial(fc, tau_d, alpha, phi_choices_deg)
 
     %% ------------ DPPA frame decision ------------
     Ldiff = numel(Td_H1);
-    VH1 = sum(Td_H1 >= tau_d);
-    VH0 = sum(Td_H0 >= tau_d);
-
-    acceptH1 = (VH1 >= ceil(alpha * Ldiff));
-    acceptH0 = (VH0 >= ceil(alpha * Ldiff));
+    % VH1 = sum(Td_H1 >= tau_d);
+    % VH0 = sum(Td_H0 >= tau_d);
+    % 
+    % acceptH1 = (VH1 >= ceil(alpha * Ldiff));
+    % acceptH0 = (VH0 >= ceil(alpha * Ldiff));
+    %% ------------ Authentication window length ------------
+    Lauth = 16;
+    
+    Lauth_eff = min(Lauth, numel(Td_H1));
+    
+    Td_H1_auth = Td_H1(1:Lauth_eff);
+    Td_H0_auth = Td_H0(1:Lauth_eff);
+    
+    dErr_H1_auth_deg = dErr_H1_deg(1:Lauth_eff);
+    dErr_H0_auth_deg = dErr_H0_deg(1:Lauth_eff);
+    
+    %% ------------ DPPA frame decision ------------
+    VH1 = sum(Td_H1_auth >= tau_d);
+    VH0 = sum(Td_H0_auth >= tau_d);
+    
+    acceptH1 = (VH1 >= ceil(alpha * Lauth_eff));
+    acceptH0 = (VH0 >= ceil(alpha * Lauth_eff));
 
     %% ------------ BER ------------
     [rxPSDU, ~, ~] = wlanNonHTDataRecover(rxData, chanEst, noiseEst, cfgNonHT);
@@ -495,10 +568,14 @@ function res = run_one_dppa_trial(fc, tau_d, alpha, phi_choices_deg)
     res.ber = ber;
     res.numErr = numErr;
     res.Lbits = L;
-    res.TdH1_mean = mean(Td_H1);
-    res.TdH0_mean = mean(Td_H0);
-    res.dErrH1_mean_deg = mean(abs(dErr_H1_deg));
-    res.dErrH0_mean_deg = mean(abs(dErr_H0_deg));
+    % res.TdH1_mean = mean(Td_H1);
+    % res.TdH0_mean = mean(Td_H0);
+    % res.dErrH1_mean_deg = mean(abs(dErr_H1_deg));
+    % res.dErrH0_mean_deg = mean(abs(dErr_H0_deg));
+    res.TdH1_mean = mean(Td_H1_auth);
+    res.TdH0_mean = mean(Td_H0_auth);
+    res.dErrH1_mean_deg = mean(abs(dErr_H1_auth_deg));
+    res.dErrH0_mean_deg = mean(abs(dErr_H0_auth_deg));
     res.VH1 = VH1;
     res.VH0 = VH0;
     res.Ldiff = Ldiff;
@@ -510,6 +587,12 @@ function res = run_one_dppa_trial(fc, tau_d, alpha, phi_choices_deg)
     res.rxMaxAmp = rxMaxAmp;
     res.Td_H1 = Td_H1;
     res.Td_H0 = Td_H0;
+    res.Lsym  = numSym;
+    %res.Ldiff = numel(Td_H1);
+    res.Ldiff = Ldiff;
+    res.Lauth = Lauth_eff;
+    res.Td_H1_auth = Td_H1_auth;
+    res.Td_H0_auth = Td_H0_auth;
 
    
 end

@@ -68,8 +68,10 @@ function y = applyPilotPermutationNonHT(waveform, cfgNonHT, node, C_seed, nonce_
 
 
         if ell <= 3
-            fprintf('TX symbol %d seed=%u permAuth=[%d %d]\n', ...
-                ell, seed_u32, perm_auth(1), perm_auth(2));
+            % fprintf('TX symbol %d seed=%u permAuth=[%d %d]\n', ...
+            %     ell, seed_u32, perm_auth(1), perm_auth(2));
+            fprintf('TX symbol %d seed=%u permAuth=[%s]\n', ...
+                 ell, seed_u32, num2str(perm_auth));
         end
 
         %p_mod(authLocal) = p_nom(authLocal(perm_auth));
